@@ -1,0 +1,68 @@
+services:
+  vaultwarden:
+    image: vaultwarden/server:latest
+    restart: unless-stopped
+    volumes:
+      - ./docker/vaultwarden/data:/data/
+    ports:
+      - 127.0.0.1:8000:80
+    environment:
+      SIGNUPS_ALLOWED: "true"
+      DOMAIN: ${VAULTWARDEN_DOMAIN}
+
+  wireguard:
+    image: linuxserver/wireguard
+    container_name: wireguard
+    cap_add:
+      - NET_ADMIN
+      - SYS_MODULE
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - TZ=America/Bogota
+      - SERVERPORT=51820
+      - PEERS=${WIREGUARD_PEERS}
+      - PEERDNS=auto
+      - INTERNAL_SUBNET=10.13.13.0
+      - SERVERURL=${WIREGUARD_DOMAIN}
+    volumes:
+      - ./docker/wireguard/config:/config
+      - ./docker/wireguard/modules:/lib/modules
+      - ./docker/wireguard/src:/usr/src
+    ports:
+      - 51820:51820/udp
+    sysctls:
+      - net.ipv4.conf.all.src_valid_mark=1
+    dns:
+      - 172.20.0.2
+    restart: unless-stopped
+    networks:
+      containers:
+        ipv4_address: 172.20.0.3
+
+  pihole:
+    container_name: pihole
+    image: pihole/pihole:latest
+    expose:
+      - "53"
+      - "67"
+      - "80"
+      - "443"
+    environment:
+      TZ: 'America/Bogota'
+      WEBPASSWORD: ${PIHOLE_WEBPASSWORD}
+    volumes:
+      - ./docker/pihole/etc-pihole:/etc/pihole/
+      - ./docker/pihole/etc-dnsmasq.d:/etc/dnsmasq.d/
+    cap_add:
+      - NET_ADMIN
+    restart: unless-stopped
+    networks:
+      containers:
+        ipv4_address: 172.20.0.2
+
+networks:
+  containers:
+    ipam:
+      config:
+        - subnet: 172.20.0.0/24

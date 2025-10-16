@@ -1,0 +1,8 @@
+# Environment files
+.env
+!*-example
+
+# Editor files
+.vscode
+.idea
+.DS_Store
