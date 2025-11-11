@@ -1,14 +1,48 @@
 services:
+  traefik:
+    image: traefik
+    restart: always
+    command:
+      - "--api.insecure=true"
+      - "--providers.docker=true"
+      - "--providers.docker.exposedbydefault=false"
+      - "--entrypoints.web.address=:80"
+      - "--entrypoints.web.http.redirections.entryPoint.to=websecure"
+      - "--entrypoints.web.http.redirections.entrypoint.scheme=https"
+      - "--entrypoints.websecure.address=:443"
+      - "--certificatesresolvers.mytlschallenge.acme.tlschallenge=true"
+      - "--certificatesresolvers.mytlschallenge.acme.email=${SSL_EMAIL}"
+      - "--certificatesresolvers.mytlschallenge.acme.storage=/letsencrypt/acme.json"
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - traefik_data:/letsencrypt
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+
   vaultwarden:
     image: vaultwarden/server:latest
     restart: unless-stopped
     volumes:
-      - ./docker/vaultwarden/data:/data/
-    ports:
-      - 127.0.0.1:8000:80
+      - ./docker/vaultwarden:/data
     environment:
       SIGNUPS_ALLOWED: "true"
       DOMAIN: ${VAULTWARDEN_DOMAIN}
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.vaultwarden.rule=Host(`vaultwarden.${DOMAIN_NAME}`)
+      - traefik.http.routers.vaultwarden.tls=true
+      - traefik.http.routers.vaultwarden.entrypoints=web,websecure
+      - traefik.http.routers.vaultwarden.tls.certresolver=mytlschallenge
+      - traefik.http.middlewares.vaultwarden.headers.SSLRedirect=true
+      - traefik.http.middlewares.vaultwarden.headers.STSSeconds=315360000
+      - traefik.http.middlewares.vaultwarden.headers.browserXSSFilter=true
+      - traefik.http.middlewares.vaultwarden.headers.contentTypeNosniff=true
+      - traefik.http.middlewares.vaultwarden.headers.forceSTSHeader=true
+      - traefik.http.middlewares.vaultwarden.headers.SSLHost=${DOMAIN_NAME}
+      - traefik.http.middlewares.vaultwarden.headers.STSIncludeSubdomains=true
+      - traefik.http.middlewares.vaultwarden.headers.STSPreload=true
+      - traefik.http.routers.vaultwarden.middlewares=vaultwarden@docker
 
   wireguard:
     image: linuxserver/wireguard
@@ -30,7 +64,7 @@ services:
       - ./docker/wireguard/modules:/lib/modules
       - ./docker/wireguard/src:/usr/src
     ports:
-      - 51820:51820/udp
+      - 51821:51820/udp
     sysctls:
       - net.ipv4.conf.all.src_valid_mark=1
     dns:
@@ -48,6 +82,10 @@ services:
       - "67"
       - "80"
       - "443"
+    ports:
+      - 54:53/tcp
+      - 54:53/udp
+      - 67:67/udp
     environment:
       TZ: 'America/Bogota'
       WEBPASSWORD: ${PIHOLE_WEBPASSWORD}
@@ -60,6 +98,25 @@ services:
     networks:
       containers:
         ipv4_address: 172.20.0.2
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.pihole.rule=Host(`pihole.${DOMAIN_NAME}`)
+      - traefik.http.routers.pihole.tls=true
+      - traefik.http.routers.pihole.entrypoints=web,websecure
+      - traefik.http.routers.pihole.tls.certresolver=mytlschallenge
+      - traefik.http.middlewares.pihole.headers.SSLRedirect=true
+      - traefik.http.middlewares.pihole.headers.STSSeconds=315360000
+      - traefik.http.middlewares.pihole.headers.browserXSSFilter=true
+      - traefik.http.middlewares.pihole.headers.contentTypeNosniff=true
+      - traefik.http.middlewares.pihole.headers.forceSTSHeader=true
+      - traefik.http.middlewares.pihole.headers.SSLHost=${DOMAIN_NAME}
+      - traefik.http.middlewares.pihole.headers.STSIncludeSubdomains=true
+      - traefik.http.middlewares.pihole.headers.STSPreload=true
+      - traefik.http.routers.pihole.middlewares=pihole@docker
+
+volumes:
+  vaultwarden:
+  traefik_data:
 
 networks:
   containers:
